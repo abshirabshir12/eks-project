@@ -1,6 +1,3 @@
-# ──────────────────────────────────────────────
-# ECR REPOSITORY
-# ──────────────────────────────────────────────
 
 resource "aws_ecr_repository" "app" {
   name                 = "2048-game"
@@ -11,22 +8,16 @@ resource "aws_ecr_repository" "app" {
   }
 }
 
-# ──────────────────────────────────────────────
-# VPC MODULE
-# ──────────────────────────────────────────────
 
 module "vpc" {
-  source                = "./modules/vpc"
-  vpc_cidr              = var.vpc_cidr
-  cluster_name          = var.cluster_name
-  region                = var.region
-  az_1                  = var.az_1
-  az_2                  = var.az_2
+  source       = "./modules/vpc"
+  vpc_cidr     = var.vpc_cidr
+  cluster_name = var.cluster_name
+  region       = var.region
+  az_1         = var.az_1
+  az_2         = var.az_2
 }
 
-# ──────────────────────────────────────────────
-# EKS MODULE
-# ──────────────────────────────────────────────
 
 module "eks" {
   source           = "./modules/eks"

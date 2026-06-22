@@ -5,6 +5,14 @@
 *.tfvars
 .terraform.lock.hcl
 crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform plan files
+*.tfplan
+tfplan
 
 # Docker
 *.tar
@@ -12,3 +20,26 @@ crash.log
 # OS
 .DS_Store
 Thumbs.db
+.DS_Store?
+._*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Kubernetes secrets (never commit these)
+*-secret.yaml
+*-secrets.yaml
+
+# AWS
+.aws/
+credentials
+
+# Logs
+*.log
+logs/
+
+# Node (in case you add any tooling)
+node_modules/

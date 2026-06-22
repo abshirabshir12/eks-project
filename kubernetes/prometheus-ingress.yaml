@@ -1,26 +1,26 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: app-ingress
-  namespace: default
+  name: prometheus-ingress
+  namespace: monitoring
   annotations:
-    external-dns.alpha.kubernetes.io/hostname: ???
+    external-dns.alpha.kubernetes.io/hostname: prometheus.abshirabshir.co.uk
     cert-manager.io/cluster-issuer: letsencrypt-route53
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
   tls:
   - hosts:
-      - eks.abshirabshir.co.uk
-    secretName: app-tls
+      - prometheus.abshirabshir.co.uk
+    secretName: prometheus-tls
   rules:
-  - host: eks.abshirabshir.co.uk
+  - host: prometheus.abshirabshir.co.uk
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: app-service
+            name: prometheus-kube-prometheus-prometheus
             port:
-              number: 8080
+              number: 9090

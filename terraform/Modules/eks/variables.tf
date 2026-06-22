@@ -57,5 +57,5 @@ variable "min_size" {
 variable "region" {
   description = "AWS region to deploy into"
   type        = string
-  default     = "eu-north-1"
+  default     = "eu-west-2"
 }

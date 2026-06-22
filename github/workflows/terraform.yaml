@@ -1,0 +1,252 @@
+name: Terraform 
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  security-events: write
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: '1.9.0'
+  AWS_REGION: 'eu-west-2'
+  TERRAFORM_DIR: './terraform'
+  CLUSTER_NAME: 'eks-proj-cluster'
+
+jobs:
+  # ──────────────────────────────────────────────
+  # JOB 1 — VALIDATE
+  # Runs on every push and PR
+  # Checks formatting and syntax without touching AWS
+  # ──────────────────────────────────────────────
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check formatting
+        id: fmt
+        run: terraform fmt -check -recursive
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        continue-on-error: true
+
+      - name: Initialise without backend
+        id: init
+        run: terraform init -backend=false
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Validate syntax
+        id: validate
+        run: terraform validate -no-color
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Comment results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Validation Results
+            - Format: \`${{ steps.fmt.outcome }}\`
+            - Init: \`${{ steps.init.outcome }}\`
+            - Validate: \`${{ steps.validate.outcome }}\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  # ──────────────────────────────────────────────
+  # JOB 2 — SECURITY SCAN
+  # Runs Checkov to scan Terraform for misconfigurations
+  # Runs after validate passes
+  # ──────────────────────────────────────────────
+  security_scan:
+    name: Checkov Security Scan
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ${{ env.TERRAFORM_DIR }}
+          framework: terraform
+          output_format: sarif
+          output_file_path: reports/results.sarif
+          soft_fail: true
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/results.sarif
+
+  # ──────────────────────────────────────────────
+  # JOB 3 — PLAN
+  # Only runs on pull requests
+  # Shows what Terraform would change without applying
+  # ──────────────────────────────────────────────
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [validate, security_scan]
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Terraform plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        continue-on-error: true
+
+      - name: Save plan as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.TERRAFORM_DIR }}/tfplan
+          retention-days: 5
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "Terraform plan complete. Check the Actions tab for full details."
+            })
+
+  # ──────────────────────────────────────────────
+  # JOB 4 — APPLY
+  # Only runs on push to main
+  # Actually provisions infrastructure on AWS
+  # ──────────────────────────────────────────────
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: [validate, security_scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Check if cluster already exists
+        id: check_cluster
+        run: |
+          if aws eks describe-cluster \
+            --name ${{ env.CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
+
+      - name: Apply VPC and EKS first
+        if: steps.check_cluster.outputs.exists == 'false'
+        run: |
+          terraform apply -auto-approve \
+            -target=module.vpc \
+            -target=module.eks
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Wait for cluster to be active
+        if: steps.check_cluster.outputs.exists == 'false'
+        run: |
+          aws eks wait cluster-active \
+            --name ${{ env.CLUSTER_NAME }} \
+            --region ${{ env.AWS_REGION }}
+          sleep 30
+
+      - name: Apply remaining resources
+        run: terraform apply -auto-approve
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Save Terraform outputs
+        if: success()
+        run: terraform output -json > outputs.json
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Upload outputs as artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ env.TERRAFORM_DIR }}/outputs.json
+          retention-days: 30
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## Terraform Apply Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- Cluster: ${{ env.CLUSTER_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Region: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY

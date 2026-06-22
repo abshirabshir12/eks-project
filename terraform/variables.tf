@@ -1,7 +1,7 @@
 variable "region" {
   description = "AWS region to deploy into"
   type        = string
-  default     = "eu-north-1"
+  default     = "eu-west-2"
 }
 
 variable "cluster_name" {
@@ -19,13 +19,13 @@ variable "vpc_cidr" {
 variable "az_1" {
   description = "First availability zone"
   type        = string
-  default     = "eu-north-1a"
+  default     = "eu-west-2a"
 }
 
 variable "az_2" {
   description = "Second availability zone"
   type        = string
-  default     = "eu-north-1b"
+  default     = "eu-west-2b"
 }
 
 variable "public_subnet_cidr_1" {

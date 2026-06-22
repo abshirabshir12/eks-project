@@ -9,7 +9,7 @@ terraform {
   backend "s3" {
     bucket       = "eks-proj-abs"
     key          = "terraform.tfstate"
-    region       = "eu-north-1"
+    region       = "eu-west-2"
     use_lockfile = true
     encrypt      = true
   }

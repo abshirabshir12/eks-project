@@ -6,8 +6,8 @@ variable "vpc_cidr" {
 
 variable "region" {
   description = "region"
-  type = string
-  default = "eu-north-1"
+  type        = string
+  default     = "eu-west-2"
 }
 
 variable "cluster_name" {
@@ -16,15 +16,15 @@ variable "cluster_name" {
   default     = "eks-proj"
 }
 variable "az_1" {
- description = "availability zones"
-  type = string
-  default = "eu-north-1a"
+  description = "availability zones"
+  type        = string
+  default     = "eu-west-2a"
 }
 
 variable "az_2" {
   description = "availability zones"
-  type = string
-  default = "eu-north-1b"
+  type        = string
+  default     = "eu-west-2b"
 }
 
 variable "public_subnet_cidr_1" {
@@ -52,6 +52,6 @@ variable "private_subnet_cidr_2" {
 }
 
 variable "all_traffic_cidr" {
-  type = string
+  type    = string
   default = "0.0.0.0/0"
 }
